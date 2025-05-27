@@ -7,9 +7,11 @@ from awsglue.job import Job
 from awsgluedq.transforms import EvaluateDataQuality
 from awsglue import DynamicFrame
 
-# -----------------------------------------------
-# Initialize Glue Job
-# -----------------------------------------------
+def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
+    for alias, frame in mapping.items():
+        frame.toDF().createOrReplaceTempView(alias)
+    result = spark.sql(query)
+    return DynamicFrame.fromDF(result, glueContext, transformation_ctx)
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 sc = SparkContext()
 glueContext = GlueContext(sc)
@@ -17,34 +19,21 @@ spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
-# -----------------------------------------------
-# Basic Data Quality Rules
-# -----------------------------------------------
+# Default ruleset used by all target nodes with data quality enabled
 DEFAULT_DATA_QUALITY_RULESET = """
-Rules = [
-    ColumnCount > 0
-]
+    Rules = [
+        ColumnCount > 0
+    ]
 """
 
-# -----------------------------------------------
-# Read from Trusted Zones
-# -----------------------------------------------
-accelerometer_trusted_df = glueContext.create_dynamic_frame.from_catalog(
-    database="stedi_lake",
-    table_name="accelerometer_trusted",
-    transformation_ctx="accelerometer_trusted_df"
-)
+# Script generated for node StepTrainerTrustedSource
+StepTrainerTrustedSource_node1748124306379 = glueContext.create_dynamic_frame.from_catalog(database="stedi_lake", table_name="step_trainer_trusted", transformation_ctx="StepTrainerTrustedSource_node1748124306379")
 
-step_trainer_trusted_df = glueContext.create_dynamic_frame.from_catalog(
-    database="stedi_lake",
-    table_name="step_trainer_trusted",
-    transformation_ctx="step_trainer_trusted_df"
-)
+# Script generated for node AccelerometerTrustedSource
+AccelerometerTrustedSource_node1748124260691 = glueContext.create_dynamic_frame.from_catalog(database="stedi_lake", table_name="accelerometer_trusted", transformation_ctx="AccelerometerTrustedSource_node1748124260691")
 
-# -----------------------------------------------
-# Join both datasets on timestamp / sensor time
-# -----------------------------------------------
-query = """
+# Script generated for node JoinStepTrainerWithCustomer
+SqlQuery0 = '''
 SELECT DISTINCT
   a.user,
   a.timestamp,
@@ -54,80 +43,21 @@ SELECT DISTINCT
   s.sensorreadingtime,
   s.serialnumber
 FROM
-  step_trainer_trusted_df s
+  StepTrainerTrustedSource s
 JOIN
-  accelerometer_trusted_df a
+  AccelerometerTrustedSource a
 ON
   s.sensorreadingtime = a.timestamp
-"""
+'''
+JoinStepTrainerWithCustomer_node1748124354807 = sparkSqlQuery(glueContext, query = SqlQuery0, mapping = {"StepTrainerTrustedSource":StepTrainerTrustedSource_node1748124306379, "AccelerometerTrustedSource":AccelerometerTrustedSource_node1748124260691}, transformation_ctx = "JoinStepTrainerWithCustomer_node1748124354807")
 
-def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
-    for alias, frame in mapping.items():
-        frame.toDF().createOrReplaceTempView(alias)
-    result = spark.sql(query)
-    return DynamicFrame.fromDF(result, glueContext, transformation_ctx)
+# Script generated for node Change Schema
+ChangeSchema_node1748125317599 = ApplyMapping.apply(frame=JoinStepTrainerWithCustomer_node1748124354807, mappings=[("user", "string", "user", "string"), ("timestamp", "bigint", "timestamp", "long"), ("x", "double", "x", "double"), ("y", "double", "y", "double"), ("z", "double", "z", "double"), ("sensorreadingtime", "bigint", "sensorreadingtime", "long"), ("serialnumber", "string", "serialnumber", "string")], transformation_ctx="ChangeSchema_node1748125317599")
 
-joined_df = sparkSqlQuery(
-    glueContext,
-    query=query,
-    mapping={
-        "step_trainer_trusted_df": step_trainer_trusted_df,
-        "accelerometer_trusted_df": accelerometer_trusted_df
-    },
-    transformation_ctx="joined_df"
-)
-
-# -----------------------------------------------
-# Apply Schema Mapping
-# -----------------------------------------------
-mapped_df = ApplyMapping.apply(
-    frame=joined_df,
-    mappings=[
-        ("user", "string", "user", "string"),
-        ("timestamp", "bigint", "timestamp", "long"),
-        ("x", "double", "x", "double"),
-        ("y", "double", "y", "double"),
-        ("z", "double", "z", "double"),
-        ("sensorreadingtime", "bigint", "sensorreadingtime", "long"),
-        ("serialnumber", "string", "serialnumber", "string")
-    ],
-    transformation_ctx="mapped_df"
-)
-
-# -----------------------------------------------
-# Evaluate Data Quality (Optional)
-# -----------------------------------------------
-EvaluateDataQuality().process_rows(
-    frame=mapped_df,
-    ruleset=DEFAULT_DATA_QUALITY_RULESET,
-    publishing_options={
-        "dataQualityEvaluationContext": "dq_curated",
-        "enableDataQualityResultsPublishing": True
-    },
-    additional_options={
-        "dataQualityResultsPublishing.strategy": "BEST_EFFORT",
-        "observations.scope": "ALL"
-    }
-)
-
-# -----------------------------------------------
-# Write to curated output
-# -----------------------------------------------
-sink = glueContext.getSink(
-    path="s3://stedi-datalake-terraform-kr/machine_learning_curated/",
-    connection_type="s3",
-    updateBehavior="UPDATE_IN_DATABASE",
-    partitionKeys=[],
-    enableUpdateCatalog=True,
-    transformation_ctx="ml_curated_sink"
-)
-
-sink.setCatalogInfo(
-    catalogDatabase="stedi_lake",
-    catalogTableName="machine_learning_curated"
-)
-
-sink.setFormat("glueparquet", compression="snappy")
-sink.writeFrame(mapped_df)
-
+# Script generated for node MachineLearningCuratedSink
+EvaluateDataQuality().process_rows(frame=ChangeSchema_node1748125317599, ruleset=DEFAULT_DATA_QUALITY_RULESET, publishing_options={"dataQualityEvaluationContext": "EvaluateDataQuality_node1748123518510", "enableDataQualityResultsPublishing": True}, additional_options={"dataQualityResultsPublishing.strategy": "BEST_EFFORT", "observations.scope": "ALL"})
+MachineLearningCuratedSink_node1748125390108 = glueContext.getSink(path="s3://stedi-datalake-terraform-kr/machine_learning_curated/", connection_type="s3", updateBehavior="UPDATE_IN_DATABASE", partitionKeys=[], enableUpdateCatalog=True, transformation_ctx="MachineLearningCuratedSink_node1748125390108")
+MachineLearningCuratedSink_node1748125390108.setCatalogInfo(catalogDatabase="stedi_lake",catalogTableName="machine_learning_curated")
+MachineLearningCuratedSink_node1748125390108.setFormat("glueparquet", compression="snappy")
+MachineLearningCuratedSink_node1748125390108.writeFrame(ChangeSchema_node1748125317599)
 job.commit()

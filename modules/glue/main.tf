@@ -144,6 +144,33 @@ resource "aws_glue_job" "accelerometer_trusted" {
   ]
 }
 
+resource "aws_glue_job" "customer_trusted_to_curated" {
+  name     = "customer_trusted_to_curated"
+  role_arn = var.glue_role_arn
+
+  command {
+    name            = "glueetl"
+    script_location = "s3://stedi-datalake-terraform-kr/scripts/customer_trusted_to_curated.py"
+    python_version  = "3"
+  }
+
+  glue_version = "4.0"
+
+  default_arguments = {
+    "--job-language"                        = "python"
+    "--enable-metrics"                      = "true"
+    "--enable-continuous-cloudwatch-log"    = "true"
+    "--enable-glue-datacatalog"             = "true"
+    "--TempDir"                             = "s3://stedi-datalake-terraform-kr/tmp/"
+  }
+
+  max_retries       = 1
+  execution_class   = "STANDARD"
+  number_of_workers = 2
+  worker_type       = "G.1X"
+}
+
+
 # -------------------------------
 # CUSTOMER CURATED TABLE
 # -------------------------------

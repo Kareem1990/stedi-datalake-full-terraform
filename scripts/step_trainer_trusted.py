@@ -7,9 +7,12 @@ from awsglue.job import Job
 from awsgluedq.transforms import EvaluateDataQuality
 from awsglue import DynamicFrame
 
-# -----------------------------------------------
-# Initialize Glue Job
-# -----------------------------------------------
+def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
+    for alias, frame in mapping.items():
+        frame.toDF().createOrReplaceTempView(alias)
+    result = spark.sql(query)
+    return DynamicFrame.fromDF(result, glueContext, transformation_ctx)
+
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 sc = SparkContext()
 glueContext = GlueContext(sc)
@@ -17,74 +20,57 @@ spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
-# -----------------------------------------------
-# Basic Data Quality Rules
-# -----------------------------------------------
+# Default ruleset used by all target nodes with data quality enabled
 DEFAULT_DATA_QUALITY_RULESET = """
-Rules = [
-    ColumnCount > 0
-]
+    Rules = [
+        ColumnCount > 0
+    ]
 """
 
-# -----------------------------------------------
-# Read from Catalog: step_trainer_landing + customer_curated
-# -----------------------------------------------
-step_trainer_df = glueContext.create_dynamic_frame.from_catalog(
+# Script generated for node StepTrainerSource
+StepTrainerSource_node = glueContext.create_dynamic_frame.from_catalog(
     database="stedi_lake",
     table_name="step_trainer_landing",
-    transformation_ctx="step_trainer_df"
+    transformation_ctx="StepTrainerSource_node"
 )
 
-customer_curated_df = glueContext.create_dynamic_frame.from_catalog(
+# Script generated for node CustomerCuratedSource
+CustomerCuratedSource_node = glueContext.create_dynamic_frame.from_catalog(
     database="stedi_lake",
     table_name="customer_curated",
-    transformation_ctx="customer_curated_df"
+    transformation_ctx="CustomerCuratedSource_node"
 )
 
-# -----------------------------------------------
-# Join both datasets on serialNumber
-# -----------------------------------------------
-query = """
-SELECT s.*
-FROM step_trainer_df s
-JOIN customer_curated_df c
-  ON s.serialNumber = c.serialNumber
-"""
+# ✅ FIXED SQL Join Case Sensitivity Issue
+SqlQuery = '''
+SELECT StepTrainerSource.*
+FROM StepTrainerSource
+JOIN CustomerCuratedSource
+  ON StepTrainerSource.serialNumber = CustomerCuratedSource.serialnumber
+'''
 
-def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
-    for alias, frame in mapping.items():
-        frame.toDF().createOrReplaceTempView(alias)
-    result = spark.sql(query)
-    return DynamicFrame.fromDF(result, glueContext, transformation_ctx)
-
-joined_df = sparkSqlQuery(
+Joined_node = sparkSqlQuery(
     glueContext,
-    query=query,
+    query=SqlQuery,
     mapping={
-        "step_trainer_df": step_trainer_df,
-        "customer_curated_df": customer_curated_df
+        "StepTrainerSource": StepTrainerSource_node,
+        "CustomerCuratedSource": CustomerCuratedSource_node
     },
-    transformation_ctx="joined_df"
+    transformation_ctx="Joined_node"
 )
 
-# -----------------------------------------------
-# Apply Schema Mapping
-# -----------------------------------------------
-mapped_df = ApplyMapping.apply(
-    frame=joined_df,
+Mapped_node = ApplyMapping.apply(
+    frame=Joined_node,
     mappings=[
         ("sensorReadingTime", "bigint", "sensorReadingTime", "long"),
         ("serialNumber", "string", "serialNumber", "string"),
         ("distanceFromObject", "int", "distanceFromObject", "int")
     ],
-    transformation_ctx="mapped_df"
+    transformation_ctx="Mapped_node"
 )
 
-# -----------------------------------------------
-# Evaluate Data Quality (Optional)
-# -----------------------------------------------
 EvaluateDataQuality().process_rows(
-    frame=mapped_df,
+    frame=Mapped_node,
     ruleset=DEFAULT_DATA_QUALITY_RULESET,
     publishing_options={
         "dataQualityEvaluationContext": "dq_step_trainer",
@@ -96,16 +82,13 @@ EvaluateDataQuality().process_rows(
     }
 )
 
-# -----------------------------------------------
-# Write to Trusted Zone + Register in Catalog
-# -----------------------------------------------
 sink = glueContext.getSink(
     path="s3://stedi-datalake-terraform-kr/step_trainer_trusted/",
     connection_type="s3",
-    updateBehavior="UPDATE_IN_DATABASE",
+    updateBehavior="LOG",
     partitionKeys=[],
     enableUpdateCatalog=True,
-    transformation_ctx="step_trainer_trusted_sink"
+    transformation_ctx="StepTrainerTrustedSink_node"
 )
 
 sink.setCatalogInfo(
@@ -114,6 +97,6 @@ sink.setCatalogInfo(
 )
 
 sink.setFormat("glueparquet", compression="snappy")
-sink.writeFrame(mapped_df)
+sink.writeFrame(Mapped_node)
 
 job.commit()
