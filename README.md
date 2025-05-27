@@ -77,7 +77,7 @@ This will:
 * Upload Python ETL scripts to S3
 * Deploy your full pipeline infrastructure
 
-![Screenshot Title](C:\Users\kimo_\Desktop\Udacity\stedi-datalake-full-terraform\screenshots\repo\terraform-apply.png)
+![Terraform Apply](screenshots/repo/terraform-apply.png)
 
 ### 3. ▶️ Run the ETL Pipeline
 
