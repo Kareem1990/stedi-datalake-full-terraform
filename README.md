@@ -93,7 +93,8 @@ After Terraform completes:
   4. `step_trainer_trusted`
   5. `machine_learning_curated`
 
-![Screenshot Title](screenshots\repo\machine-job.png)
+![Machine Learning Job](screenshots/repo/machine-job.png)
+
 
 ## 🔍 Example Athena Queries
 
@@ -112,10 +113,7 @@ LIMIT 10;
 SELECT * FROM stedi_lake.machine_learning_curated
 WHERE serialnumber = '1234-ABCD';
 ```
-
-### 📸 Screenshot Placeholder:
-
-![Screenshot Title](screenshots\repo\tables-datalake.png)
+![Data Catalog Tables](screenshots/repo/tables-datalake.png)
 
 ## 💸 Clean Up
 
@@ -124,10 +122,7 @@ When you're done testing, destroy your stack to avoid AWS charges:
 ```bash
 terraform destroy
 ```
-
-### 📸 Screenshot Placeholder:
-
-> 📷 Screenshot of successful Terraform destroy output
+![Terraform Destroy](screenshots/repo/terraform-destroy.png)
 
 ---
 
