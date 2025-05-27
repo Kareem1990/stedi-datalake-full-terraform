@@ -18,19 +18,6 @@ module "glue" {
   glue_role_arn        = module.iam.glue_role_arn
 }
 
-resource "null_resource" "trigger_all_jobs" {
-  provisioner "local-exec" {
-    command = "cmd /C run_glue_jobs.bat"
-  }
-
-  depends_on = [
-    module.glue
-  ]
-}
-
-
-
-
 
 
 

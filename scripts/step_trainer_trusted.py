@@ -48,7 +48,7 @@ query = """
 SELECT s.*
 FROM step_trainer_df s
 JOIN customer_curated_df c
-ON s.serialNumber = c.serialNumber
+  ON s.serialNumber = c.serialNumber
 """
 
 def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
